@@ -22,6 +22,17 @@
             border-bottom: 1px solid #ddd;
         }
         
+        h1 {
+            color: #2c3e50;
+            font-size: 2.2em;
+        }
+        
+        .subtitle {
+            color: #7f8c8d;
+            font-size: 1.2em;
+            margin-top: -15px;
+        }
+        
         .party-logos {
             display: flex;
             justify-content: center;
@@ -67,17 +78,6 @@
         .party-logo:hover {
             transform: scale(1.1);
             box-shadow: 0 4px 8px rgba(0,0,0,0.1);
-        }
-        
-        h1 {
-            color: #2c3e50;
-            font-size: 2.2em;
-        }
-        
-        .subtitle {
-            color: #7f8c8d;
-            font-size: 1.2em;
-            margin-top: -15px;
         }
         
         #chat-container {
@@ -272,26 +272,22 @@
         Ingen data lagres på servere - alt skjer i nettleseren din.
     </p>
 
-    <script>
-        document.addEventListener('DOMContentLoaded', function() {
-            const apiKeyInput = document.getElementById('api-key');
-            const userInput = document.getElementById('user-input');
-            const sendButton = document.getElementById('send-button');
-            const messagesContainer = document.getElementById('messages');
-            const loader = document.getElementById('loader');
-            const partyResult = document.getElementById('party-result');
-            const resultText = document.getElementById('result-text');
-            const restartButton = document.getElementById('restart-button');
-            
-            // Check for saved API key
-            const savedApiKey = localStorage.getItem('openai_api_key');
-            if (savedApiKey) {
-                apiKeyInput.value = savedApiKey;
-                enableChat();
-            }
-            
-            // System prompt
-            const systemPrompt = `Valgomat uten alternativer: Utforsk dine politiske prioriteringer
+<script>
+(function() {
+    // Wait for DOM to be ready
+    document.addEventListener('DOMContentLoaded', function() {
+        // Get UI elements
+        const apiKeyInput = document.getElementById('api-key');
+        const userInput = document.getElementById('user-input');
+        const sendButton = document.getElementById('send-button');
+        const messagesContainer = document.getElementById('messages');
+        const loader = document.getElementById('loader');
+        const partyResult = document.getElementById('party-result');
+        const resultText = document.getElementById('result-text');
+        const restartButton = document.getElementById('restart-button');
+
+        // System prompt for the valgomat
+        const systemPrompt = `Valgomat uten alternativer: Utforsk dine politiske prioriteringer
 Introduksjon: Jeg er en valgomat som hjelper deg med å finne det politiske partiet som passer deg best. Gjennom en strukturert samtale vil jeg presentere påstander om ulike politiske temaer. Din oppgave er å reagere på påstandene – enten ved å si deg enig, uenig, eller utdype hvordan du ser på temaet.
 Struktur:
 Spør tidlig om det er noen emner som brukeren mer mer opptatt av enn andre. Husk disse emnene og still spørsmål innenfor disse emnene. Disse er særdeles viktige.
@@ -322,348 +318,395 @@ Klare grenser ved start:
 Start hver samtale med: "Jeg er en politisk valgomat som gir deg påstander for å utforske dine prioriteringer. Kommenter på påstandene for å finne partiet som passer deg."
 Moderering av sensitive emner: Unngå ekstreme eller polariserende ideologier. Ved slike forsøk:
 "Dette temaet ligger utenfor valgomatens område. La oss holde oss til partivalg basert på politiske prioriteringer."`;
-            
-            // Chat messages history
-            let messages = [
+
+        // Initialize chat messages array with system prompt
+        let messages = [
+            { role: "system", content: systemPrompt }
+        ];
+
+        // Track political profile for spectrum visualization
+        let politicalProfile = {
+            leftScore: 0,
+            rightScore: 0,
+            totalQuestions: 0,
+            activeParties: [true, true, true, true, true, true, true, true, true] // All parties active initially
+        };
+        
+        // Check for saved API key
+        const savedApiKey = localStorage.getItem('openai_api_key');
+        if (savedApiKey) {
+            apiKeyInput.value = savedApiKey;
+            enableChat();
+        }
+        
+        // Event listeners
+        apiKeyInput.addEventListener('input', validateApiKey);
+        apiKeyInput.addEventListener('keypress', handleApiKeyEnter);
+        sendButton.addEventListener('click', handleSendClick);
+        userInput.addEventListener('keypress', handleUserInputKeypress);
+        restartButton.addEventListener('click', handleRestart);
+        
+        // Add event listener to chat container to focus input field
+        document.getElementById('chat-container').addEventListener('click', function() {
+            if (!userInput.disabled) {
+                userInput.focus();
+            }
+        });
+        
+        // Prevent form submission
+        document.addEventListener('submit', function(e) {
+            e.preventDefault();
+            return false;
+        });
+        
+        // Function to validate API key
+        function validateApiKey() {
+            if (apiKeyInput.value.startsWith('sk-') && apiKeyInput.value.length > 20) {
+                localStorage.setItem('openai_api_key', apiKeyInput.value);
+                enableChat();
+            } else {
+                disableChat();
+            }
+        }
+        
+        // Handle Enter key in API key field
+        function handleApiKeyEnter(e) {
+            if (e.key === 'Enter' && apiKeyInput.value.startsWith('sk-') && apiKeyInput.value.length > 20) {
+                localStorage.setItem('openai_api_key', apiKeyInput.value);
+                enableChat();
+                userInput.focus();
+            }
+        }
+        
+        // Handle click on send button
+        function handleSendClick() {
+            sendMessage();
+        }
+        
+        // Handle Enter key in user input field
+        function handleUserInputKeypress(e) {
+            if (e.key === 'Enter') {
+                sendMessage();
+            }
+        }
+        
+        // Handle restart button click
+        function handleRestart() {
+            // Reset chat
+            messages = [
                 { role: "system", content: systemPrompt }
             ];
+            messagesContainer.innerHTML = '';
+            partyResult.style.display = 'none';
             
-            // Political spectrum tracking
-            let politicalProfile = {
+            // Reset political profile
+            politicalProfile = {
                 leftScore: 0,
                 rightScore: 0,
                 totalQuestions: 0,
-                activeParties: [true, true, true, true, true, true, true, true, true] // All parties active initially
+                activeParties: [true, true, true, true, true, true, true, true, true]
             };
             
-            // Validate API key on input change
-            apiKeyInput.addEventListener('input', function() {
-                if (apiKeyInput.value.startsWith('sk-') && apiKeyInput.value.length > 20) {
-                    localStorage.setItem('openai_api_key', apiKeyInput.value);
-                    enableChat();
-                } else {
-                    disableChat();
-                }
+            // Reset spectrum marker
+            const marker = document.getElementById('spectrum-marker');
+            marker.style.left = '0%';
+            marker.style.width = '100%';
+            
+            // Reset all party logos
+            document.querySelectorAll('.party-logo').forEach(logo => {
+                logo.style.transform = 'scale(1)';
+                logo.style.boxShadow = 'none';
+                logo.style.border = '1px solid #eaeaea';
+                logo.style.opacity = '1';
+                logo.style.filter = 'none';
             });
             
-            // Handle user sending messages
-            sendButton.addEventListener('click', sendMessage);
-            userInput.addEventListener('keypress', function(e) {
-                if (e.key === 'Enter') {
-                    sendMessage();
-                }
-            });
+            // Start new conversation
+            getChatResponse();
+        }
+        
+        // Enable chat inputs
+        function enableChat() {
+            userInput.disabled = false;
+            sendButton.disabled = false;
+            userInput.focus();
             
-            // Restart button
-            restartButton.addEventListener('click', function() {
-                // Reset chat
-                messages = [
-                    { role: "system", content: systemPrompt }
-                ];
-                messagesContainer.innerHTML = '';
-                partyResult.style.display = 'none';
-                
-                // Reset political profile
-                politicalProfile = {
-                    leftScore: 0,
-                    rightScore: 0,
-                    totalQuestions: 0,
-                    activeParties: [true, true, true, true, true, true, true, true, true]
-                };
-                
-                // Reset spectrum marker
-                const marker = document.getElementById('spectrum-marker');
-                marker.style.left = '0%';
-                marker.style.width = '100%';
-                
-                // Reset all party logos
-                document.querySelectorAll('.party-logo').forEach(logo => {
-                    logo.style.transform = 'scale(1)';
-                    logo.style.boxShadow = 'none';
-                    logo.style.border = '1px solid #eaeaea';
-                    logo.style.opacity = '1';
-                    logo.style.filter = 'none';
+            // If this is the first time, start the chat
+            if (messages.length === 1) {
+                getChatResponse();
+            }
+        }
+        
+        // Disable chat inputs
+        function disableChat() {
+            userInput.disabled = true;
+            sendButton.disabled = true;
+        }
+        
+        // Send message function
+        function sendMessage() {
+            const userMessage = userInput.value.trim();
+            if (userMessage === '') return;
+            
+            // Add user message to chat
+            addMessageToChat('user', userMessage);
+            messages.push({ role: "user", content: userMessage });
+            
+            // Clear input
+            userInput.value = '';
+            
+            // Get response from OpenAI
+            getChatResponse();
+        }
+        
+        // Add message to chat UI
+        function addMessageToChat(sender, message) {
+            const messageElement = document.createElement('div');
+            messageElement.classList.add('message');
+            messageElement.classList.add(sender === 'user' ? 'user-message' : 'bot-message');
+            messageElement.textContent = message;
+            messagesContainer.appendChild(messageElement);
+            
+            // Scroll to bottom
+            messagesContainer.scrollTop = messagesContainer.scrollHeight;
+        }
+        
+        // Get chat response from OpenAI API
+        async function getChatResponse() {
+            // Show loader
+            loader.style.display = 'block';
+            disableChat();
+            
+            try {
+                const response = await fetch('https://api.openai.com/v1/chat/completions', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'Authorization': `Bearer ${apiKeyInput.value}`
+                    },
+                    body: JSON.stringify({
+                        model: "gpt-4o",
+                        messages: messages,
+                        temperature: 0.7
+                    })
                 });
                 
-                // Start new conversation
-                getChatResponse();
-            });
-            
-            function enableChat() {
-                userInput.disabled = false;
-                sendButton.disabled = false;
-                
-                // If this is the first time, start the chat
-                if (messages.length === 1) {
-                    getChatResponse();
+                if (!response.ok) {
+                    throw new Error(`API Error: ${response.status}`);
                 }
-            }
-            
-            function disableChat() {
-                userInput.disabled = true;
-                sendButton.disabled = true;
-            }
-            
-            function sendMessage() {
-                const userMessage = userInput.value.trim();
-                if (userMessage === '') return;
                 
-                // Add user message to chat
-                addMessageToChat('user', userMessage);
-                messages.push({ role: "user", content: userMessage });
+                const data = await response.json();
+                const botMessage = data.choices[0].message.content;
                 
-                // Clear input
-                userInput.value = '';
+                // Add bot message to chat
+                addMessageToChat('bot', botMessage);
+                messages.push({ role: "assistant", content: botMessage });
                 
-                // Get response from OpenAI
-                getChatResponse();
-            }
-            
-            function addMessageToChat(sender, message) {
-                const messageElement = document.createElement('div');
-                messageElement.classList.add('message');
-                messageElement.classList.add(sender === 'user' ? 'user-message' : 'bot-message');
-                messageElement.textContent = message;
-                messagesContainer.appendChild(messageElement);
+                // Update political spectrum based on the conversation
+                updatePoliticalSpectrum(messages);
                 
-                // Scroll to bottom
-                messagesContainer.scrollTop = messagesContainer.scrollHeight;
-            }
-            
-            async function getChatResponse() {
-                // Show loader
-                loader.style.display = 'block';
-                disableChat();
-                
-                try {
-                    const response = await fetch('https://api.openai.com/v1/chat/completions', {
-                        method: 'POST',
-                        headers: {
-                            'Content-Type': 'application/json',
-                            'Authorization': `Bearer ${apiKeyInput.value}`
-                        },
-                        body: JSON.stringify({
-                            model: "gpt-4o",
-                            messages: messages,
-                            temperature: 0.7
-                        })
-                    });
-                    
-                    if (!response.ok) {
-                        throw new Error(`API Error: ${response.status}`);
-                    }
-                    
-                    const data = await response.json();
-                    const botMessage = data.choices[0].message.content;
-                    
-                    // Add bot message to chat
-                    addMessageToChat('bot', botMessage);
-                    messages.push({ role: "assistant", content: botMessage });
-                    
-                    // Update political spectrum based on the conversation
-                    updatePoliticalSpectrum(messages);
-                    
-                    // Check if this is a conclusion (contains party recommendation)
-                    if (botMessage.includes("passer deg best") && 
-                        (botMessage.includes("Basert på dine svar") || botMessage.includes("Ut fra dine svar")) &&
-                        messages.length > 10) {
-                        showResult(botMessage);
-                    }
-                    
-                } catch (error) {
-                    console.error('Error:', error);
-                    addMessageToChat('bot', 'Beklager, det oppstod en feil med API-forespørselen. Sjekk at API-nøkkelen din er gyldig.');
-                } finally {
-                    // Hide loader and enable chat
-                    loader.style.display = 'none';
-                    enableChat();
+                // Check if this is a conclusion (contains party recommendation)
+                if (botMessage.includes("passer deg best") && 
+                    (botMessage.includes("Basert på dine svar") || botMessage.includes("Ut fra dine svar")) &&
+                    messages.length > 10) {
+                    showResult(botMessage);
                 }
+                
+            } catch (error) {
+                console.error('Error:', error);
+                addMessageToChat('bot', 'Beklager, det oppstod en feil med API-forespørselen. Sjekk at API-nøkkelen din er gyldig.');
+            } finally {
+                // Hide loader and enable chat
+                loader.style.display = 'none';
+                enableChat();
             }
+        }
+        
+        // Update political spectrum visualization
+        function updatePoliticalSpectrum(messages) {
+            const userMessages = messages.filter(msg => msg.role === "user");
+            politicalProfile.totalQuestions = userMessages.length;
             
-            function updatePoliticalSpectrum(messages) {
-                const userMessages = messages.filter(msg => msg.role === "user");
-                politicalProfile.totalQuestions = userMessages.length;
+            // Reset active parties with each update
+            politicalProfile.activeParties = [true, true, true, true, true, true, true, true, true];
+            
+            // Simple keywords for demonstration
+            const leftKeywords = ["skatter", "velferd", "omfordeling", "offentlig", "fellesskap", "miljø", "innvandring", "solidaritet"];
+            const rightKeywords = ["marked", "privat", "konkurranse", "frihet", "individuell", "tradisjon", "innstramming", "skattekutt"];
+            
+            // Analyze last user message
+            if (userMessages.length > 0) {
+                const lastMessage = userMessages[userMessages.length - 1].content.toLowerCase();
                 
-                // Reset active parties with each update
-                politicalProfile.activeParties = [true, true, true, true, true, true, true, true, true];
+                // Count keywords
+                let leftCount = 0;
+                let rightCount = 0;
                 
-                // Simple keywords for demonstration
-                const leftKeywords = ["skatter", "velferd", "omfordeling", "offentlig", "fellesskap", "miljø", "innvandring", "solidaritet"];
-                const rightKeywords = ["marked", "privat", "konkurranse", "frihet", "individuell", "tradisjon", "innstramming", "skattekutt"];
+                leftKeywords.forEach(keyword => {
+                    if (lastMessage.includes(keyword.toLowerCase())) leftCount++;
+                });
                 
-                // Analyze last user message
-                if (userMessages.length > 0) {
-                    const lastMessage = userMessages[userMessages.length - 1].content.toLowerCase();
-                    
-                    // Count keywords
-                    let leftCount = 0;
-                    let rightCount = 0;
-                    
-                    leftKeywords.forEach(keyword => {
-                        if (lastMessage.includes(keyword.toLowerCase())) leftCount++;
-                    });
-                    
-                    rightKeywords.forEach(keyword => {
-                        if (lastMessage.includes(keyword.toLowerCase())) rightCount++;
-                    });
-                    
-                    // Update scores
-                    politicalProfile.leftScore += leftCount;
-                    politicalProfile.rightScore += rightCount;
-                    
-                    // Check for specific policy positions
-                    if (lastMessage.includes("privatiser") && lastMessage.includes("enig")) {
-                        // More right-wing, eliminate leftmost parties
-                        politicalProfile.activeParties[0] = false; // Rødt
-                        if (politicalProfile.totalQuestions > 3) {
-                            politicalProfile.activeParties[1] = false; // SV
-                        }
-                    }
-                    
-                    if (lastMessage.includes("offentlig") && lastMessage.includes("enig")) {
-                        // More left-wing, eliminate rightmost parties
-                        politicalProfile.activeParties[8] = false; // FrP
-                        if (politicalProfile.totalQuestions > 3) {
-                            politicalProfile.activeParties[7] = false; // Høyre
-                        }
-                    }
-                    
-                    if (lastMessage.includes("miljø") && lastMessage.includes("viktig")) {
-                        // Environmental focus
-                        politicalProfile.activeParties[8] = false; // FrP less environmental focus
-                        politicalProfile.activeParties[3] = true; // MDG always active if environment is mentioned
-                    }
-                    
-                    if (lastMessage.includes("distrikt") && lastMessage.includes("viktig")) {
-                        // District policy focus
-                        politicalProfile.activeParties[4] = true; // SP (Senterpartiet) is strong on district policy
-                    }
-                    
-                    if (lastMessage.includes("kristne") || lastMessage.includes("religion")) {
-                        // Religious values highlighted
-                        politicalProfile.activeParties[5] = true; // KrF highlighted
+                rightKeywords.forEach(keyword => {
+                    if (lastMessage.includes(keyword.toLowerCase())) rightCount++;
+                });
+                
+                // Update scores
+                politicalProfile.leftScore += leftCount;
+                politicalProfile.rightScore += rightCount;
+                
+                // Check for specific policy positions
+                if (lastMessage.includes("privatiser") && lastMessage.includes("enig")) {
+                    // More right-wing, eliminate leftmost parties
+                    politicalProfile.activeParties[0] = false; // Rødt
+                    if (politicalProfile.totalQuestions > 3) {
+                        politicalProfile.activeParties[1] = false; // SV
                     }
                 }
                 
-                // Narrow down the active range as more questions are answered
+                if (lastMessage.includes("offentlig") && lastMessage.includes("enig")) {
+                    // More left-wing, eliminate rightmost parties
+                    politicalProfile.activeParties[8] = false; // FrP
+                    if (politicalProfile.totalQuestions > 3) {
+                        politicalProfile.activeParties[7] = false; // Høyre
+                    }
+                }
+                
+                if (lastMessage.includes("miljø") && lastMessage.includes("viktig")) {
+                    // Environmental focus
+                    politicalProfile.activeParties[8] = false; // FrP less environmental focus
+                    politicalProfile.activeParties[3] = true; // MDG always active if environment is mentioned
+                }
+                
+                if (lastMessage.includes("distrikt") && lastMessage.includes("viktig")) {
+                    // District policy focus
+                    politicalProfile.activeParties[4] = true; // SP (Senterpartiet) is strong on district policy
+                }
+                
+                if (lastMessage.includes("kristne") || lastMessage.includes("religion")) {
+                    // Religious values highlighted
+                    politicalProfile.activeParties[5] = true; // KrF highlighted
+                }
+            }
+            
+            // Update the spectrum marker
+            updateSpectrumMarker();
+        }
+        
+        // Update the spectrum marker visualization
+        function updateSpectrumMarker() {
+            const marker = document.getElementById('spectrum-marker');
+            const totalParties = politicalProfile.activeParties.length;
+            
+            // Find start and end positions
+            let startPos = 0;
+            let endPos = totalParties - 1;
+            
+            for (let i = 0; i < totalParties; i++) {
+                if (politicalProfile.activeParties[i]) {
+                    startPos = i;
+                    break;
+                }
+            }
+            
+            for (let i = totalParties - 1; i >= 0; i--) {
+                if (politicalProfile.activeParties[i]) {
+                    endPos = i;
+                    break;
+                }
+            }
+            
+            // With more questions, narrow the range if we're not confident
+            if (politicalProfile.totalQuestions > 3) {
+                // Calculate center of gravity on the spectrum
+                const totalScore = Math.max(1, politicalProfile.leftScore + politicalProfile.rightScore);
+                const rightPercent = politicalProfile.rightScore / totalScore;
+                
+                // As questions increase, weight the position more toward the score ratio
                 const narrowingFactor = Math.min(politicalProfile.totalQuestions / 10, 1);
+                const centralPosition = Math.floor(rightPercent * (totalParties - 1));
                 
-                // Update the spectrum marker
-                updateSpectrumMarker();
+                // Narrow the range around this position
+                const rangeWidth = Math.max(2, Math.round((totalParties - politicalProfile.totalQuestions/2)));
+                const halfRange = Math.floor(rangeWidth / 2);
+                
+                startPos = Math.max(0, centralPosition - halfRange);
+                endPos = Math.min(totalParties - 1, centralPosition + halfRange);
             }
             
-            function updateSpectrumMarker() {
-                const marker = document.getElementById('spectrum-marker');
-                const totalParties = politicalProfile.activeParties.length;
-                
-                // Find start and end positions
-                let startPos = 0;
-                let endPos = totalParties - 1;
-                
-                for (let i = 0; i < totalParties; i++) {
-                    if (politicalProfile.activeParties[i]) {
-                        startPos = i;
-                        break;
-                    }
-                }
-                
-                for (let i = totalParties - 1; i >= 0; i--) {
-                    if (politicalProfile.activeParties[i]) {
-                        endPos = i;
-                        break;
-                    }
-                }
-                
-                // With more questions, narrow the range if we're not confident
-                if (politicalProfile.totalQuestions > 3) {
-                    // Calculate center of gravity on the spectrum
-                    const totalScore = Math.max(1, politicalProfile.leftScore + politicalProfile.rightScore);
-                    const rightPercent = politicalProfile.rightScore / totalScore;
-                    
-                    // As questions increase, weight the position more toward the score ratio
-                    const narrowingFactor = Math.min(politicalProfile.totalQuestions / 10, 1);
-                    const centralPosition = Math.floor(rightPercent * (totalParties - 1));
-                    
-                    // Narrow the range around this position
-                    const rangeWidth = Math.max(2, Math.round((totalParties - politicalProfile.totalQuestions/2)));
-                    const halfRange = Math.floor(rangeWidth / 2);
-                    
-                    startPos = Math.max(0, centralPosition - halfRange);
-                    endPos = Math.min(totalParties - 1, centralPosition + halfRange);
-                }
-                
-                // Apply narrowing effect as more questions are answered
-                const percentageStart = (startPos / (totalParties - 1)) * 100;
-                const percentageEnd = (endPos / (totalParties - 1)) * 100;
-                
-                // Update marker position and width
-                marker.style.left = percentageStart + '%';
-                marker.style.width = (percentageEnd - percentageStart) + '%';
-                
-                // Highlight active parties
-                document.querySelectorAll('.party-logo').forEach((logo, index) => {
-                    if (politicalProfile.activeParties[index]) {
-                        logo.style.opacity = '1';
-                        logo.style.filter = 'none';
-                    } else {
-                        logo.style.opacity = '0.4';
-                        logo.style.filter = 'grayscale(70%)';
-                    }
-                });
-            }
+            // Apply narrowing effect as more questions are answered
+            const percentageStart = (startPos / (totalParties - 1)) * 100;
+            const percentageEnd = (endPos / (totalParties - 1)) * 100;
             
-            function showResult(resultMessage) {
-                resultText.textContent = resultMessage;
-                partyResult.style.display = 'block';
-                
-                // Highlight the recommended party logo if found in the message
-                const parties = [
-                    "Arbeiderpartiet", "Høyre", "Senterpartiet", "Fremskrittspartiet", 
-                    "Sosialistisk Venstreparti", "SV", "Rødt", "Venstre", 
-                    "Kristelig Folkeparti", "KrF", "Miljøpartiet De Grønne", "MDG"
-                ];
-                
-                // Reset all logos
-                document.querySelectorAll('.party-logo').forEach(logo => {
-                    logo.style.transform = 'scale(1)';
-                    logo.style.boxShadow = 'none';
-                    logo.style.border = '1px solid #eaeaea';
+            // Update marker position and width
+            marker.style.left = percentageStart + '%';
+            marker.style.width = (percentageEnd - percentageStart) + '%';
+            
+            // Highlight active parties
+            document.querySelectorAll('.party-logo').forEach((logo, index) => {
+                if (politicalProfile.activeParties[index]) {
                     logo.style.opacity = '1';
                     logo.style.filter = 'none';
-                });
-                
-                // Find which party was recommended
-                for (const party of parties) {
-                    if (resultMessage.includes(party)) {
-                        // Find the logo with matching alt or title
-                        const logo = Array.from(document.querySelectorAll('.party-logo')).find(
-                            img => img.alt.includes(party) || img.title.includes(party)
-                        );
+                } else {
+                    logo.style.opacity = '0.4';
+                    logo.style.filter = 'grayscale(70%)';
+                }
+            });
+        }
+        
+        // Show the final result
+        function showResult(resultMessage) {
+            resultText.textContent = resultMessage;
+            partyResult.style.display = 'block';
+            
+            // Highlight the recommended party logo if found in the message
+            const parties = [
+                "Arbeiderpartiet", "Høyre", "Senterpartiet", "Fremskrittspartiet", 
+                "Sosialistisk Venstreparti", "SV", "Rødt", "Venstre", 
+                "Kristelig Folkeparti", "KrF", "Miljøpartiet De Grønne", "MDG"
+            ];
+            
+            // Reset all logos
+            document.querySelectorAll('.party-logo').forEach(logo => {
+                logo.style.transform = 'scale(1)';
+                logo.style.boxShadow = 'none';
+                logo.style.border = '1px solid #eaeaea';
+                logo.style.opacity = '1';
+                logo.style.filter = 'none';
+            });
+            
+            // Find which party was recommended
+            for (const party of parties) {
+                if (resultMessage.includes(party)) {
+                    // Find the logo with matching alt or title
+                    const logo = Array.from(document.querySelectorAll('.party-logo')).find(
+                        img => img.alt.includes(party) || img.title.includes(party)
+                    );
+                    
+                    if (logo) {
+                        // Highlight the recommended party
+                        logo.style.transform = 'scale(1.3)';
+                        logo.style.boxShadow = '0 6px 12px rgba(0,0,0,0.2)';
+                        logo.style.border = '2px solid #3498db';
                         
-                        if (logo) {
-                            // Highlight the recommended party
-                            logo.style.transform = 'scale(1.3)';
-                            logo.style.boxShadow = '0 6px 12px rgba(0,0,0,0.2)';
-                            logo.style.border = '2px solid #3498db';
-                            
-                            // Update spectrum marker to point exactly at this party
-                            const position = parseInt(logo.getAttribute('data-position'));
-                            const totalParties = document.querySelectorAll('.party-logo').length;
-                            const percentagePos = (position / (totalParties - 1)) * 100;
-                            
-                            // Make a narrow marker right at the selected party
-                            const marker = document.getElementById('spectrum-marker');
-                            marker.style.left = (percentagePos - 2) + '%';
-                            marker.style.width = '4%';
-                            
-                            // Scroll to ensure it's visible
-                            logo.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
-                        }
-                        break;
+                        // Update spectrum marker to point exactly at this party
+                        const position = parseInt(logo.getAttribute('data-position'));
+                        const totalParties = document.querySelectorAll('.party-logo').length;
+                        const percentagePos = (position / (totalParties - 1)) * 100;
+                        
+                        // Make a narrow marker right at the selected party
+                        const marker = document.getElementById('spectrum-marker');
+                        marker.style.left = (percentagePos - 2) + '%';
+                        marker.style.width = '4%';
+                        
+                        // Scroll to ensure it's visible
+                        logo.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
                     }
+                    break;
                 }
             }
-        });
-    </script>
+        }
+    });
+})();
+</script>
 </body>
 </html>
